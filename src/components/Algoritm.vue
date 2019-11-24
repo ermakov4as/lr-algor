@@ -81,13 +81,16 @@
                     black: elem.color==='black',
                     orangeBorders: elem.color==='orange-borders',
                     darkOrangeBorders: elem.color==='dark-orange-borders',
+                    darkBlueBorders: elem.color==='dark-blue-borders',
                     pointer: isReg && (startMode || finishMode || prepMode)
                   }"
-                  :style="selectedAlg==='poten' && !elem.prep && elem.color!=='green' && elem.color!=='red' &&
-                    ((!elem.resPrep && `background: rgba(0,0,168,${elem.finPrep / maxFinPrep});`) ||   
-                    (elem.resPrep && `background: rgba(255,255,0,${elem.resPrep / maxPotPrep});`))"
+                  :style="!elem.prep && elem.color!=='green' && elem.color!=='red' &&
+                    ((selectedAlg==='poten' &&
+                      ((!elem.resPrep && `background: rgba(0,0,168,${elem.finPrep / maxFinPrep});`) ||   
+                      (elem.resPrep && `background: rgba(255,255,0,${elem.resPrep / maxPotPrep});`)))
+                    || (selectedAlg==='deik' && (elem.d!==(10*dimX*dimY) && `background: rgba(255,255,0,${elem.d / maxDeikWeight});`)))"
                   >
-                  {{ elem.d!==-1 ? elem.d : '' }}
+                  {{ (elem.d!==-1&&selectedAlg!=='deik') ? (elem.d) : ((elem.d!==(10*dimX*dimY)&&elem.d!==-1) ? elem.d : '') }}
                 </td>
               </tr>
             </body>
@@ -111,7 +114,7 @@
                 {{ dimX }}
               </b-col>
               <b-col cols="2.5" style="margin-top: 16px;">
-                <b-button variant="outline-info" @click="clearAll()">Изменить</b-button>
+                <b-button variant="outline-info" @click="clearAll()" :disabled="dimX<=0 || dimY<=0">Изменить</b-button>
               </b-col>
               <b-col cols="2" style="margin-top: 16px;">
                 <b-button variant="outline-info" @click="resetDims()">Вернуть</b-button>
@@ -188,7 +191,9 @@ export default {
       _dimY4: null,
       maxPotPrep: null,
       maxFinPrep: null,
-      
+      maxVisited: null,
+      visited: null,
+      maxDeikWeight: null
     }
   },
   methods: {
@@ -235,7 +240,8 @@ export default {
     },
     calculate() {
       if (!this.startPointReady || !this.finishPointReady) {
-        console.log('Сперва выберите точки начала и конца пути') // TODO: alert
+        console.log('Сперва выберите точки начала и конца пути')
+        this.showFailAlert('Сперва выберите точки начала и конца пути')
       } else {
         switch (this.selectedAlg) {
           case 'voln':
@@ -273,13 +279,114 @@ export default {
       this.potenCalculatePole()
     },
     calculateDeik() {
-      this.deikInitWeights() // TODO:
-      // this.deikCalculateWeights() // TODO:
-      // this.deikReturnRoute() // TODO:
-      console.log('TODO:')
+      this.deikInitWeights()
+      this.deikGlobalCalculateWeights()
+      if (!this.calculateReady) {
+        this.deikReturnRoute()
+        this.deikVisualCalculatePersentWeight()
+      }
     },
     calculateAstar() {
       console.log('TODO:')
+    },
+    deikVisualCalculatePersentWeight() {
+      for (let i in _.range(this.dimX)) {
+        for (let j in _.range(this.dimY)) {
+          if (!this.pole[i][j].prep && this.pole[i][j].d!==10*this.dimX*this.dimY) {
+            if (this.pole[i][j].d > this.maxDeikWeight) this.maxDeikWeight = this.pole[i][j].d
+          }
+        }
+      }
+    },
+    deikReturnRoute() {
+      let x = this.pole[this.finish_x][this.finish_y].deikPrevPoint.x
+      let y = this.pole[this.finish_x][this.finish_y].deikPrevPoint.y
+      while (!(x===this.start_x && y===this.start_y)) {
+        let _prevPoint = this.pole[x][y].deikPrevPoint
+        this.pole[x][y].color = 'dark-blue-borders'
+        x = _prevPoint.x
+        y = _prevPoint.y
+      }
+      return
+    },
+    deikInitWeights() {
+      this.maxVisited = 0
+      this.visited = 0
+      this.maxDeikWeight = 0
+      let _maxD = 10 * this.dimX * this.dimY
+      for (let i in _.range(this.dimX)) {
+        for (let j in _.range(this.dimY)) {
+          if (!this.pole[i][j].prep) {
+            this.maxVisited += 1
+            this.pole[i][j].d = _maxD
+          }
+        }
+      }
+      this.pole[this.start_x][this.start_y].d = 0
+    },
+    deikGlobalCalculateWeights() {
+      this.deikCalculateWeights(this.start_x, this.start_y)
+    },
+    deikCalculateWeights(x, y) {
+      this.pole[x][y].visited = true
+      this.visited += 1
+      this.deikSearchNeighbours(x, y)
+      if (this.visited === this.maxVisited) {
+        console.log('Прямой ход алгоритма Дейкстры завершён.')
+        return
+      } else this.deikFindMinNotVisitedWeight()
+    },
+    deikFindMinNotVisitedWeight() {
+      let _minWeight = 10 * this.dimX * this.dimY
+      let _x, _y
+      for (let i in _.range(this.dimX)) {
+        for (let j in _.range(this.dimY)) {
+          if (!this.pole[i][j].prep && !this.pole[i][j].visited) {
+            if (this.pole[i][j].d < _minWeight) {
+              _x = i
+              _y = j
+              _minWeight = this.pole[i][j].d
+            }
+          }
+        }
+      }
+      if (!_x || !_y) {
+        if (this.pole[this.finish_x][this.finish_y].d === 10*this.dimX*this.dimY) {
+          console.log('Финиш недостижим')
+          this.calculateReady = true
+          this.showFailAlert('Невозможно проложить маршрут между заданными точками')
+        } else console.log('Есть недоступные точки на карте')
+        return
+      } else this.deikCalculateWeights(_x, _y)
+    },
+    deikSearchNeighbours(x, y) {
+      let _neighbours = []
+      for (let i in _.range(3)) {
+        for (let j in _.range(3)) {
+          let _x = Number(x)+Number(i)-1
+          let _y = Number(y)+Number(j)-1
+          if (_x>=0 && _x<this.dimX && _y>=0 && _y<this.dimY && !this.pole[_x][_y].prep) {
+            if (!this.pole[_x][_y].visited) {
+              let _distMode = Number(Math.abs(_x-x) + Math.abs(_y-y))
+              let _addDist
+              switch (_distMode) {
+                case 1:
+                  _addDist = 10
+                  break
+                case 2:
+                  _addDist = 14
+                  break
+                default:
+                  break
+              }
+              if (this.pole[x][y].d+_addDist < this.pole[_x][_y].d) {
+                this.pole[_x][_y].d = this.pole[x][y].d+_addDist
+                this.pole[_x][_y].deikPrevPoint = {x, y}
+              }
+            }
+          }
+        }
+      }
     },
     potenSetPoleAdded() {
       this._dimX4 = Number(Number(this.dimX) + 2)
@@ -288,7 +395,7 @@ export default {
       for (let i in _.range(this._dimX4)) {
         let _line = []
         for (let j in _.range(this._dimY4)) {
-          if (i<1 || this._dimX4-i<=1 || j<1 || this._dimX4-j<=1) {
+          if (i<1 || this._dimX4-i<=1 || j<1 || this._dimY4-j<=1) {
             _line.push({
               color: 'black',
               prep: true,
@@ -463,7 +570,6 @@ export default {
           for (let point of currentFwd) {
             nextFwd = this.checkNeighbours(point.x, point.y, 'fwd', nextFwd)
           }
-          console.log(nextFwd)
           if (!nextFwd.length && !this.completedFwd) {
             console.log('Финиш недостижим')
             this.calculateReady = true
@@ -552,6 +658,8 @@ export default {
           this.pole[i][j].finPrep = 0
           this.pole[i][j].sumPrep = 0
           this.pole[i][j].resPrep = 0
+          this.pole[i][j].visited = false
+          this.pole[i][j].deikPrevPoint = null
           if (!(this.pole[i][j].color==='white' || this.pole[i][j].color==='black')) {
             this.pole[i][j].color = 'white'
           }
@@ -577,7 +685,9 @@ export default {
             potPrep: 0,
             finPrep: 0,
             sumPrep: 0,
-            resPrep: 0
+            resPrep: 0,
+            visited: false,
+            deikPrevPoint: null
           })
         }
         _pole.push(_line)
@@ -665,6 +775,10 @@ export default {
 }
 .darkOrangeBorders {
   border: 4px solid darkorange;
+}
+.darkBlueBorders {
+  border: 4px solid darkmagenta;
+  color: blue;
 }
 .pointer {
   cursor: pointer;
