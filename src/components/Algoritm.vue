@@ -36,7 +36,7 @@
           <b-button v-if="!isReg" v-b-modal.modal-1 variant="outline-primary">Войти</b-button>
           <b-row v-else>
             <b-col cols="8">
-              <b-form-select v-model="selectedAlg" :options="algTypes"></b-form-select>
+              <b-form-select v-model="selectedAlg" :options="algTypes" @change="changeAlgor()"></b-form-select>
             </b-col>
             <b-col cols="4">
               <b-row>
@@ -84,7 +84,7 @@
                     darkBlueBorders: elem.color==='dark-blue-borders',
                     pointer: isReg && (startMode || finishMode || prepMode)
                   }"
-                  :style="!elem.prep && elem.color!=='green' && elem.color!=='red' &&
+                  :style="!elem.prep && elem.color!=='green' && elem.color!=='red' && calculateReady &&
                     ((selectedAlg==='poten' &&
                       ((!elem.resPrep && `background: rgba(0,0,168,${elem.finPrep / maxFinPrep});`) ||   
                       (elem.resPrep && `background: rgba(255,255,0,${elem.resPrep / maxPotPrep});`)))
@@ -797,6 +797,26 @@ export default {
       this.dimX = 10
       this.dimY = 10
       this.clearAll()
+    },
+    changeAlgor() {
+      this.calculateReady = false
+      for (let i in _.range(this.dimX)) {
+        for (let j in _.range(this.dimY)) {
+          this.pole[i][j].d = -1
+          this.pole[i][j].h = -1
+          this.pole[i][j].dhS = -1
+          this.pole[i][j].potPrep = 0
+          this.pole[i][j].finPrep = 0
+          this.pole[i][j].sumPrep = 0
+          this.pole[i][j].resPrep = 0
+          this.pole[i][j].visited = false
+          this.pole[i][j].deikPrevPoint = null
+          if (!(this.pole[i][j].color==='white' || this.pole[i][j].color==='black' || 
+            this.pole[i][j].color==='green' || this.pole[i][j].color==='red')) {
+              this.pole[i][j].color = 'white'
+          }
+        }
+      }
     }
   },
   created() {
