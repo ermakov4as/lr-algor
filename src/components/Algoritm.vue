@@ -88,9 +88,13 @@
                     ((selectedAlg==='poten' &&
                       ((!elem.resPrep && `background: rgba(0,0,168,${elem.finPrep / maxFinPrep});`) ||   
                       (elem.resPrep && `background: rgba(255,255,0,${elem.resPrep / maxPotPrep});`)))
-                    || (selectedAlg==='deik' && (elem.d!==(10*dimX*dimY) && `background: rgba(255,255,0,${elem.d / maxDeikWeight});`)))"
+                    || (selectedAlg==='deik' && (elem.d!==(10*dimX*dimY) && `background: rgba(255,255,0,${elem.d / maxDeikWeight});`))
+                    || (selectedAlg==='astar' && (elem.dhS!==(2*10*dimX*dimY) && 
+                      `background: rgba(128,255,0,${(elem.dhS-minAstarWeight) / (maxAstarWeight-minAstarWeight)});`)))"
                   >
-                  {{ (elem.d!==-1&&selectedAlg!=='deik') ? (elem.d) : ((elem.d!==(10*dimX*dimY)&&elem.d!==-1) ? elem.d : '') }}
+                    <template v-if="selectedAlg==='voln'&&elem.d!==-1">{{ elem.d }}</template>
+                    <template v-if="selectedAlg==='deik'&&elem.d!==-1&&elem.d!==(10*dimX*dimY)">{{ elem.d }}</template>
+                    <template v-if="selectedAlg==='astar'&&elem.dhS!==-1&&elem.dhS!==(2*10*dimX*dimY)">{{ elem.dhS }}</template>
                 </td>
               </tr>
             </body>
@@ -181,7 +185,7 @@ export default {
         {value: 'voln', text: 'Волновой'},
         {value: 'poten', text: 'Потенциальный'},
         {value: 'deik', text: 'Дейкстры'},
-        {value: 'astar', text: 'А *', disabled: true}
+        {value: 'astar', text: 'А *'}
       ],
       selectedAlg: null,
       poleAdded: null,
@@ -193,7 +197,10 @@ export default {
       maxFinPrep: null,
       maxVisited: null,
       visited: null,
-      maxDeikWeight: null
+      maxDeikWeight: null,
+      deikAstarMode: false,
+      maxAstarWeight: null,
+      minAstarWeight: null
     }
   },
   methods: {
@@ -278,7 +285,8 @@ export default {
       this.potenCalculateDistWeight()
       this.potenCalculatePole()
     },
-    calculateDeik() {
+    calculateDeik(astarMode=false) {
+      this.deikAstarMode = astarMode
       this.deikInitWeights()
       this.deikGlobalCalculateWeights()
       if (!this.calculateReady) {
@@ -287,16 +295,25 @@ export default {
       }
     },
     calculateAstar() {
-      console.log('TODO:')
+      let astarMode = true
+      this.calculateDeik(astarMode)
     },
     deikVisualCalculatePersentWeight() {
       for (let i in _.range(this.dimX)) {
         for (let j in _.range(this.dimY)) {
-          if (!this.pole[i][j].prep && this.pole[i][j].d!==10*this.dimX*this.dimY) {
-            if (this.pole[i][j].d > this.maxDeikWeight) this.maxDeikWeight = this.pole[i][j].d
+          if (!this.deikAstarMode) {
+            if (!this.pole[i][j].prep && this.pole[i][j].d!==10*this.dimX*this.dimY) {
+              if (this.pole[i][j].d > this.maxDeikWeight) this.maxDeikWeight = this.pole[i][j].d
+            }
+          } else {
+            if (!this.pole[i][j].prep && this.pole[i][j].dhS!==2*10*this.dimX*this.dimY) {
+              if (this.pole[i][j].dhS > this.maxAstarWeight) this.maxAstarWeight = this.pole[i][j].dhS
+              if (this.pole[i][j].dhS < this.minAstarWeight) this.minAstarWeight = this.pole[i][j].dhS
+            }
           }
         }
       }
+      if (this.deikAstarMode) this.minAstarWeight = Math.round(0.9 * this.minAstarWeight)
     },
     deikReturnRoute() {
       let x = this.pole[this.finish_x][this.finish_y].deikPrevPoint.x
@@ -309,20 +326,35 @@ export default {
       }
       return
     },
+    astarHeuristic(x, y) {
+      let deltaX = Math.abs(Number(this.finish_x) - Number(x))
+      let deltaY = Math.abs(Number(this.finish_y) - Number(y))
+      let diag = Math.min(deltaX, deltaY) * 14
+      let linear = (Math.max(deltaX, deltaY) - Math.min(deltaX, deltaY)) * 10
+      let heuristic = diag + linear
+      return heuristic
+    },
     deikInitWeights() {
       this.maxVisited = 0
       this.visited = 0
       this.maxDeikWeight = 0
+      this.maxAstarWeight = 0
       let _maxD = 10 * this.dimX * this.dimY
+      this.minAstarWeight = _maxD * 2
       for (let i in _.range(this.dimX)) {
         for (let j in _.range(this.dimY)) {
           if (!this.pole[i][j].prep) {
             this.maxVisited += 1
             this.pole[i][j].d = _maxD
+            if (this.deikAstarMode) {
+              this.pole[i][j].h = this.astarHeuristic(i, j)
+              this.pole[i][j].dhS = _maxD * 2
+            }
           }
         }
       }
       this.pole[this.start_x][this.start_y].d = 0
+      this.pole[this.start_x][this.start_y].dhS = 0 + this.pole[this.start_x][this.start_y].h
     },
     deikGlobalCalculateWeights() {
       this.deikCalculateWeights(this.start_x, this.start_y)
@@ -330,22 +362,38 @@ export default {
     deikCalculateWeights(x, y) {
       this.pole[x][y].visited = true
       this.visited += 1
+      if (this.pole[this.finish_x][this.finish_y].visited) {
+        if (!this.deikAstarMode) console.log('Прямой ход алгоритма Дейкстры завершён.')
+        else console.log('Прямой ход алгоритма А * завершён.')
+        return
+      }
       this.deikSearchNeighbours(x, y)
       if (this.visited === this.maxVisited) {
-        console.log('Прямой ход алгоритма Дейкстры завершён.')
+        if (!this.deikAstarMode) console.log('Прямой ход алгоритма Дейкстры завершён.')
+        else console.log('Прямой ход алгоритма А * завершён.')
         return
       } else this.deikFindMinNotVisitedWeight()
     },
     deikFindMinNotVisitedWeight() {
       let _minWeight = 10 * this.dimX * this.dimY
+      let _minAstarWeight = _minWeight * 2
       let _x, _y
       for (let i in _.range(this.dimX)) {
         for (let j in _.range(this.dimY)) {
           if (!this.pole[i][j].prep && !this.pole[i][j].visited) {
-            if (this.pole[i][j].d < _minWeight) {
-              _x = i
-              _y = j
-              _minWeight = this.pole[i][j].d
+            if (!this.deikAstarMode) {
+              if (this.pole[i][j].d < _minWeight) {
+                _x = i
+                _y = j
+                _minWeight = this.pole[i][j].d
+              }
+            } else {
+              if (this.pole[i][j].dhS < _minAstarWeight) {
+                _x = i
+                _y = j
+                _minWeight = this.pole[i][j].d
+                _minAstarWeight = this.pole[i][j].dhS
+              }
             }
           }
         }
@@ -379,9 +427,18 @@ export default {
                 default:
                   break
               }
-              if (this.pole[x][y].d+_addDist < this.pole[_x][_y].d) {
-                this.pole[_x][_y].d = this.pole[x][y].d+_addDist
-                this.pole[_x][_y].deikPrevPoint = {x, y}
+              if (!this.deikAstarMode) {
+                if (this.pole[x][y].d+_addDist < this.pole[_x][_y].d) {
+                  this.pole[_x][_y].d = this.pole[x][y].d+_addDist
+                  this.pole[_x][_y].deikPrevPoint = {x, y}
+                }
+              } else {
+                let _addons = _addDist + this.astarHeuristic(_x, _y)
+                if (this.pole[x][y].dhS+_addons < this.pole[_x][_y].dhS) {
+                  this.pole[_x][_y].d = this.pole[x][y].d+_addDist
+                  this.pole[_x][_y].dhS = this.pole[x][y].d+_addons
+                  this.pole[_x][_y].deikPrevPoint = {x, y}
+                }
               }
             }
           }
@@ -654,6 +711,8 @@ export default {
       for (let i in _.range(this.dimX)) {
         for (let j in _.range(this.dimY)) {
           this.pole[i][j].d = -1
+          this.pole[i][j].h = -1
+          this.pole[i][j].dhS = -1
           this.pole[i][j].potPrep = 0
           this.pole[i][j].finPrep = 0
           this.pole[i][j].sumPrep = 0
@@ -682,6 +741,8 @@ export default {
             color: 'white',
             prep: false,
             d: -1,
+            h: -1,
+            dhS: -1,
             potPrep: 0,
             finPrep: 0,
             sumPrep: 0,
