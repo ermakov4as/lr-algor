@@ -1,0 +1,22 @@
+.green {
+  background-color: green;
+}
+.red {
+  background-color: red;
+}
+.blue {
+  background-color: blue;
+}
+.black {
+  background-color: black;
+}
+.pointer {
+  cursor: pointer;
+}
+.ava {
+  height: 38px;
+  width: 38px;
+  border-radius: 100px; /* Радиус скругления */
+  border: 3px solid blueviolet; /* Параметры рамки */
+  box-shadow: 0 0 7px #666; /* Параметры тени */
+}

@@ -5,7 +5,7 @@
 </template>
 
 <script>
-import Algoritm from './components/Algoritm.vue'
+import Algoritm from './views/Algoritm.vue'
 
 export default {
   name: 'app',
