@@ -1,6 +1,7 @@
 import Voln from './Algoritms/Voln'
 import Poten from './Algoritms/Poten'
 import DeikAstar from './Algoritms/DeikAstar'
+import Alert from './Alert'
 
 export default {
   start_x: null,
@@ -20,7 +21,7 @@ export default {
   calculate() {
     if (!this.startPointReady || !this.finishPointReady) {
       console.log('Сперва выберите точки начала и конца пути')
-      this.showFailAlert('Сперва выберите точки начала и конца пути')
+      Alert.showFailAlert('Сперва выберите точки начала и конца пути')
     } else {
       switch (this.selectedAlg) {
         case 'voln':
